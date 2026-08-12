@@ -8,7 +8,7 @@
 
 Una pizarra colaborativa en tiempo real que se despliega en segundos sobre una **cuenta temporal de Cloudflare**, sin necesidad de login, y se **autodestruye sola** cuando esa cuenta expira (~1 hora).
 
-Hermana de [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat) — mismo patrón (Durable Objects + `wrangler deploy --temporary`), pero para dibujar en vez de chatear.
+Hermana de [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-chat/)) — mismo patrón (Durable Objects + `wrangler deploy --temporary`), pero para dibujar en vez de chatear.
 
 ## Cómo funciona
 

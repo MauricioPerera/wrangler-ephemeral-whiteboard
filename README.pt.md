@@ -8,7 +8,7 @@
 
 Um quadro branco colaborativo em tempo real que é implantado em segundos numa **conta temporária da Cloudflare**, sem precisar de login, e **se autodestrói sozinho** quando essa conta expira (~1 hora).
 
-Irmão de [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat) — mesmo padrão (Durable Objects + `wrangler deploy --temporary`), mas para desenhar em vez de conversar.
+Irmão de [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-chat/)) — mesmo padrão (Durable Objects + `wrangler deploy --temporary`), mas para desenhar em vez de conversar.
 
 ## Como funciona
 
