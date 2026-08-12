@@ -1,5 +1,7 @@
 # 🎨 Ephemeral Whiteboard
 
+🌐 **Español** · [English](./README.en.md) · [Português](./README.pt.md)
+
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/MauricioPerera/wrangler-ephemeral-whiteboard)
 
 🌐 **[Landing page](https://mauricioperera.github.io/wrangler-ephemeral-whiteboard/)** — presentación visual del proyecto, disponible en español / English / português.
@@ -40,6 +42,7 @@ Si preferís que no expire, hacé `wrangler login` y corré `npx wrangler deploy
 - **Dibujo en tiempo real** vía WebSockets (Durable Objects hibernation API), con transmisión incremental mientras se dibuja
 - **Historial persistente**: los últimos 300 trazos se guardan en SQLite del propio Durable Object — quien entra tarde ve todo lo dibujado
 - **Paleta de colores y grosor** ajustable
+- **Exportar PNG / JSON**: descargá el dibujo como imagen, o como JSON para reimportarlo en una instancia futura y seguir donde quedaste
 - **Modo abierto / cerrado**: cualquiera con el link (abierto) vs. solo invitados (cerrado)
 - **Admin**: quien primero se conecta con `?admin=1` se vuelve admin; puede cambiar el modo, generar invitaciones y **borrar la pizarra entera**
 - **Invitaciones de un solo uso**
