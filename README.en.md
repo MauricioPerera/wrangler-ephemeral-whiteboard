@@ -8,7 +8,7 @@
 
 A real-time collaborative whiteboard that deploys in seconds on a **Cloudflare temporary account**, no login required, and **self-destructs** when that account expires (~1 hour).
 
-Sibling of [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-chat/)) and [wrangler-ephemeral-airdrop](https://github.com/MauricioPerera/wrangler-ephemeral-airdrop) — same pattern (Durable Objects + `wrangler deploy --temporary`), but for chatting or sharing a file via QR instead of drawing.
+Sibling of [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-chat/)) and [wrangler-ephemeral-airdrop](https://github.com/MauricioPerera/wrangler-ephemeral-airdrop) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-airdrop/)) — same pattern (Durable Objects + `wrangler deploy --temporary`), but for chatting or sharing a file via QR instead of drawing.
 
 ## How it works
 
