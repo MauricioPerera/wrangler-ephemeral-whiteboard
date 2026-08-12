@@ -314,6 +314,8 @@ const PAGE = `<!doctype html>
     gap: 10px;
     margin-bottom: 10px;
     flex-wrap: wrap;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
   }
   .swatch {
     width: 26px; height: 26px;
@@ -321,16 +323,23 @@ const PAGE = `<!doctype html>
     border: 2px solid transparent;
     cursor: pointer;
     padding: 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
   }
-  .swatch.active { border-color: var(--text); }
-  #widthRange { width: 90px; }
-  #clearBtn {
-    margin-left: auto;
+  .swatch.active { border-color: var(--text); transform: scale(1.12); }
+  .toolbar-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+  #widthRange { width: 90px; accent-color: var(--primary); }
+  .toolbar-actions { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .tool-btn {
     background: var(--card);
     border: 1px solid var(--border);
     color: var(--text);
     padding: 7px 12px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
+  .tool-btn:hover { background: #f2f4f8; opacity: 1; }
   #canvas-holder {
     position: relative;
     border: 1px solid var(--border);
@@ -390,8 +399,15 @@ const PAGE = `<!doctype html>
 
     <div class="toolbar">
       ${COLORS.map((c, i) => `<button class="swatch${i === 0 ? " active" : ""}" data-color="${c}" style="background:${c}"></button>`).join("")}
-      <input type="range" id="widthRange" min="1" max="16" value="3">
-      <button id="clearBtn" title="borra solo tu vista, no la pizarra">limpiar mi vista</button>
+      <input type="range" id="widthRange" min="1" max="16" value="3" title="grosor del trazo">
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-actions">
+        <button id="downloadPngBtn" class="tool-btn" title="Descarga la pizarra como imagen PNG">📷 PNG</button>
+        <button id="exportJsonBtn" class="tool-btn" title="Descarga el dibujo como JSON para poder retomarlo después">💾 Exportar</button>
+        <button id="importJsonBtn" class="tool-btn" title="Cargá un JSON exportado antes para continuar el dibujo">📂 Importar</button>
+        <input type="file" id="importJsonInput" accept="application/json" style="display:none;">
+        <button id="clearBtn" class="tool-btn" title="borra solo tu vista, no la pizarra">🧹 Mi vista</button>
+      </div>
     </div>
 
     <div id="canvas-holder">
@@ -452,6 +468,8 @@ const PAGE = `<!doctype html>
 
   function redrawAll() {
     ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
     history.forEach(drawStroke);
   }
 
@@ -582,6 +600,71 @@ const PAGE = `<!doctype html>
     currentWidth = Number(e.target.value);
   });
   document.getElementById('clearBtn').onclick = () => { redrawAll(); };
+
+  function downloadBlob(filename, blob) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  document.getElementById('downloadPngBtn').onclick = () => {
+    canvas.toBlob((blob) => {
+      if (blob) downloadBlob('pizarra-' + Date.now() + '.png', blob);
+    }, 'image/png');
+  };
+
+  document.getElementById('exportJsonBtn').onclick = () => {
+    const payload = { exportedAt: Date.now(), strokes: history };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    downloadBlob('pizarra-' + Date.now() + '.json', blob);
+  };
+
+  document.getElementById('importJsonBtn').onclick = () => {
+    document.getElementById('importJsonInput').click();
+  };
+
+  document.getElementById('importJsonInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let data;
+      try {
+        data = JSON.parse(reader.result);
+      } catch {
+        alert('El archivo no es un JSON válido.');
+        return;
+      }
+      const strokes = Array.isArray(data) ? data : data.strokes;
+      if (!Array.isArray(strokes)) {
+        alert('El JSON no tiene el formato esperado (falta "strokes").');
+        return;
+      }
+      const connected = ws && ws.readyState === 1;
+      strokes.forEach((s) => {
+        if (!s || !Array.isArray(s.points) || !s.points.length) return;
+        const stroke = {
+          name: s.name || myName,
+          color: typeof s.color === 'string' ? s.color : currentColor,
+          width: Number(s.width) || 3,
+          points: s.points,
+          ts: Date.now(),
+        };
+        history.push(stroke);
+        drawStroke(stroke);
+        if (connected) {
+          ws.send(JSON.stringify({ strokeEnd: true, color: stroke.color, width: stroke.width, points: stroke.points }));
+        }
+      });
+      logMsg((connected ? myName + ' importó' : 'Se importaron') + ' ' + strokes.length + ' trazo(s)' + (connected ? '' : ' (sin conexión: no se guardaron en el servidor)'));
+    };
+    reader.readAsText(file);
+  });
 
   document.getElementById('toggleMode').onclick = () => {
     const next = currentMode === 'open' ? 'closed' : 'open';
