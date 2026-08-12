@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ephemeral Whiteboard — pizarra que se autodestruye sola</title>
+<meta name="description" content="Pizarra colaborativa en tiempo real que se despliega en segundos con wrangler --temporary sobre una cuenta temporal de Cloudflare, y se autodestruye sola en ~1 hora.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
+<style>
+  :root {
+    --bg: #0a0b12;
+    --text: #eef0ff;
+    --muted: #9aa0c0;
+    --primary: #ff9d4d;
+    --primary2: #ff5ca8;
+    --accent: #4dd4ff;
+    --card: rgba(255,255,255,0.045);
+    --border: rgba(255,255,255,0.09);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
+  }
+  #bg-canvas { position: fixed; inset: 0; z-index: 0; display: block; }
+  .content { position: relative; z-index: 1; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(10px);
+    background: rgba(10,11,18,0.55);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .brand { font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+  nav a.navlink { color: var(--muted); text-decoration: none; font-size: 13.5px; margin-left: 22px; }
+  nav a.navlink:hover { color: var(--text); }
+  .lang-switch { display: inline-flex; gap: 4px; margin-left: 22px; background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 3px; vertical-align: middle; }
+  .lang-btn { border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; cursor: pointer; font-family: inherit; }
+  .lang-btn.active { background: linear-gradient(100deg, var(--primary), var(--primary2)); color: #0a0b12; }
+  @media (max-width: 700px) { nav .navlinks-desktop { display: none; } }
+
+  .hero {
+    min-height: 88vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+    padding: 100px 24px 60px;
+  }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--border);
+    font-size: 12.5px; color: var(--muted);
+    margin-bottom: 28px;
+  }
+  .eyebrow .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+  h1.hero-title { font-size: clamp(38px, 7vw, 76px); line-height: 1.04; margin: 0 0 18px; font-weight: 800; letter-spacing: -0.02em; }
+  h1.hero-title .grad {
+    background: linear-gradient(100deg, var(--primary), var(--primary2) 55%, var(--accent));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero-sub { max-width: 620px; color: var(--muted); font-size: 17px; line-height: 1.6; margin: 0 0 36px; }
+  .cta-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 24px; border-radius: 12px;
+    font-weight: 600; font-size: 14.5px; text-decoration: none;
+    border: 1px solid transparent;
+    transition: transform .15s ease, opacity .15s ease;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: linear-gradient(100deg, var(--primary), var(--primary2)); color: #0a0b12; }
+  .btn-ghost { background: var(--card); border-color: var(--border); color: var(--text); }
+
+  .countdown-chip {
+    margin-top: 44px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px; color: var(--accent);
+    background: var(--card); border: 1px solid var(--border);
+    padding: 10px 18px; border-radius: 999px;
+  }
+
+  section { padding: 90px 0; }
+  .section-head { text-align: center; max-width: 640px; margin: 0 auto 52px; }
+  .section-tag { color: var(--accent); font-size: 12.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 12px; }
+  .section-title { font-size: clamp(26px, 4vw, 38px); font-weight: 800; margin: 0 0 14px; letter-spacing: -0.01em; }
+  .section-sub { color: var(--muted); font-size: 15.5px; line-height: 1.65; }
+
+  .grid { display: grid; gap: 18px; }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 820px) { .grid-3 { grid-template-columns: 1fr; } }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 26px; }
+  .card .icon { font-size: 26px; margin-bottom: 14px; display: block; }
+  .card h3 { margin: 0 0 8px; font-size: 16.5px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+  .steps { counter-reset: step; display: flex; flex-direction: column; gap: 0; max-width: 720px; margin: 0 auto; }
+  .step { counter-increment: step; display: flex; gap: 20px; padding: 24px 0; border-top: 1px solid var(--border); }
+  .step:last-child { border-bottom: 1px solid var(--border); }
+  .step::before {
+    content: counter(step); flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--primary2)); color: #0a0b12; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+  }
+  .step h4 { margin: 3px 0 6px; font-size: 15.5px; }
+  .step p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .step code {
+    display: block; margin-top: 10px; background: #05060c; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+    color: var(--accent); overflow-x: auto; white-space: pre;
+  }
+
+  .usecases { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  .pill { background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 10px 18px; font-size: 13.5px; color: var(--text); }
+
+  .cta-band {
+    text-align: center;
+    background: linear-gradient(180deg, transparent, rgba(255,157,77,0.06));
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  footer { padding: 50px 0 70px; text-align: center; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--muted); }
+  footer .foot-links { display: flex; gap: 18px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
+  footer .foot-links a { text-decoration: none; }
+  footer .foot-links a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+
+<div class="content">
+  <nav>
+    <div class="wrap">
+      <div class="brand"><span class="dot"></span> Ephemeral Whiteboard</div>
+      <div>
+        <span class="navlinks-desktop">
+          <a class="navlink" href="#why" id="nav-why">Por qué</a>
+          <a class="navlink" href="#features" id="nav-features">Funcionalidades</a>
+          <a class="navlink" href="#how" id="nav-how">Cómo funciona</a>
+          <a class="navlink" href="https://github.com/MauricioPerera/wrangler-ephemeral-whiteboard">GitHub</a>
+        </span>
+        <span class="lang-switch" id="lang-switch">
+          <button class="lang-btn" data-lang="es">ES</button>
+          <button class="lang-btn" data-lang="en">EN</button>
+          <button class="lang-btn" data-lang="pt">PT</button>
+        </span>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="eyebrow"><span class="pulse"></span> <span id="hero-eyebrow">Corre sobre cuentas temporales de Cloudflare</span></div>
+    <h1 class="hero-title" id="hero-title">Una pizarra que<br><span class="grad">se autodestruye sola.</span></h1>
+    <p class="hero-sub" id="hero-sub">
+      Un comando, cero login, cero cuenta que borrar después. <code>wrangler deploy --temporary</code>
+      levanta una pizarra colaborativa en segundos sobre una cuenta de Cloudflare desechable que dura
+      ~1 hora y desaparece sola — Worker, trazos y todo.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://deploy.workers.cloudflare.com/?url=https://github.com/MauricioPerera/wrangler-ephemeral-whiteboard" target="_blank" rel="noopener">🚀 Deploy to Cloudflare</a>
+      <a class="btn btn-ghost" href="https://github.com/MauricioPerera/wrangler-ephemeral-whiteboard" target="_blank" rel="noopener" id="hero-cta-ghost">Ver código en GitHub</a>
+    </div>
+    <div class="countdown-chip" id="hero-countdown">⏳ se autodestruye en 59:59</div>
+  </header>
+
+  <section id="why">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-tag" id="why-tag">Por qué existe</div>
+        <h2 class="section-title" id="why-title">No toda pizarra necesita vivir para siempre</h2>
+        <p class="section-sub" id="why-sub">
+          A veces solo hace falta un espacio para dibujar algo puntual: explicar una idea, bocetar un
+          diagrama, jugar a adivinar. Crear cuenta, configurar y después acordarte de borrarla es
+          fricción que no aporta nada.
+        </p>
+      </div>
+      <div class="grid grid-3">
+        <div class="card">
+          <span class="icon">⚡</span>
+          <h3 id="why-c1-h">Cero fricción</h3>
+          <p id="why-c1-p">Sin crear cuenta, sin login, sin tarjeta. Un comando y tenés una pizarra pública funcionando.</p>
+        </div>
+        <div class="card">
+          <span class="icon">🧹</span>
+          <h3 id="why-c2-h">Se limpia sola</h3>
+          <p id="why-c2-p">Nada que recordar borrar. Pasada la hora, Cloudflare elimina la cuenta temporal y todo lo que contiene.</p>
+        </div>
+        <div class="card">
+          <span class="icon">🔐</span>
+          <h3 id="why-c3-h">Privada por diseño</h3>
+          <p id="why-c3-p">Modo cerrado con invitaciones de un solo uso si necesitás que dibuje solo gente específica.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-tag" id="feat-tag">Funcionalidades</div>
+        <h2 class="section-title" id="feat-title">Lo justo para dibujar en equipo</h2>
+        <p class="section-sub" id="feat-sub">Construido sobre un único Durable Object por sala: WebSockets en vivo + SQLite para el estado.</p>
+      </div>
+      <div class="grid grid-3">
+        <div class="card"><span class="icon">✏️</span><h3 id="feat-1-h">Dibujo en tiempo real</h3><p id="feat-1-p">Cada trazo se transmite en vivo mientras lo dibujás, no solo al terminar.</p></div>
+        <div class="card"><span class="icon">🗂️</span><h3 id="feat-2-h">Historial persistente</h3><p id="feat-2-p">Los últimos 300 trazos se guardan en SQLite del propio Durable Object. Quien entra tarde los ve todos.</p></div>
+        <div class="card"><span class="icon">📥</span><h3 id="feat-3-h">Exportar e importar</h3><p id="feat-3-p">Descargá tu dibujo como PNG o JSON, y reimportalo en una instancia futura para seguir donde quedaste.</p></div>
+        <div class="card"><span class="icon">🔓</span><h3 id="feat-4-h">Abierta o cerrada</h3><p id="feat-4-p">Cualquiera con el link, o solo invitados con links de un solo uso generados por el admin.</p></div>
+        <div class="card"><span class="icon">👑</span><h3 id="feat-5-h">Rol admin</h3><p id="feat-5-p">El primero en conectar con <code>?admin=1</code> controla la sala y puede borrar la pizarra entera.</p></div>
+        <div class="card"><span class="icon">📱</span><h3 id="feat-6-h">Mobile-first</h3><p id="feat-6-p">Pantalla completa en celular, dibujo táctil, sin barras raras de zoom.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-tag" id="how-tag">Cómo funciona</div>
+        <h2 class="section-title" id="how-title">De cero a pizarra en menos de un minuto</h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div>
+            <h4 id="how-1-h">Cloná el repo</h4>
+            <p id="how-1-p">No hace falta tener cuenta de Cloudflare ni estar logueado.</p>
+            <code>git clone https://github.com/MauricioPerera/wrangler-ephemeral-whiteboard.git
+cd wrangler-ephemeral-whiteboard && npm install</code>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h4 id="how-2-h">Desplegá con --temporary</h4>
+            <p id="how-2-p">Wrangler crea una cuenta desechable, despliega el Worker y te da la URL pública.</p>
+            <code>npx wrangler deploy --temporary</code>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h4 id="how-3-h">Compartí el link</h4>
+            <p id="how-3-p">Mandale la URL de la pizarra a quien quieras. Vive mientras viva la cuenta temporal (~1 hora).</p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h4 id="how-4-h">¿Te gustó? Quedátela</h4>
+            <p id="how-4-p">Wrangler también te da una <em>claim URL</em>. Abrila y logueate antes de que venza la hora
+            y el Worker pasa a tu cuenta real, para siempre. Si no hacés nada, se borra sola.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-band">
+    <div class="wrap section-head" style="margin-bottom:32px;">
+      <div class="section-tag" id="uc-tag">Casos de uso</div>
+      <h2 class="section-title" id="uc-title">¿Para qué sirve esto en la práctica?</h2>
+    </div>
+    <div class="wrap">
+      <div class="usecases">
+        <span class="pill" id="uc-1">Brainstorming rápido en equipo</span>
+        <span class="pill" id="uc-2">Explicar un diagrama en vivo</span>
+        <span class="pill" id="uc-3">Clase o taller improvisado</span>
+        <span class="pill" id="uc-4">Boceto de arquitectura</span>
+        <span class="pill" id="uc-5">Dibujar y adivinar</span>
+        <span class="pill" id="uc-6">Mapa mental colaborativo</span>
+        <span class="pill" id="uc-7">Wireframe rápido para un cliente</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="foot-links">
+        <a href="https://github.com/MauricioPerera/wrangler-ephemeral-whiteboard" target="_blank" rel="noopener" id="foot-1">Repositorio</a>
+        <a href="https://github.com/MauricioPerera/wrangler-ephemeral-whiteboard/blob/master/AGENTS.md" target="_blank" rel="noopener" id="foot-2">Guía para agentes</a>
+        <a href="https://developers.cloudflare.com/workers/platform/claim-deployments/" target="_blank" rel="noopener" id="foot-3">Docs: cuentas temporales</a>
+        <a href="https://developers.cloudflare.com/durable-objects/" target="_blank" rel="noopener" id="foot-4">Docs: Durable Objects</a>
+      </div>
+      <span id="foot-note">No afiliado con Cloudflare. Hecho con <code>wrangler deploy --temporary</code>.</span>
+    </div>
+  </footer>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+(function () {
+  var canvas = document.getElementById('bg-canvas');
+  var renderer, scene, camera, particles;
+  var mouseX = 0, mouseY = 0;
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function init() {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.z = 14;
+
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    var COUNT = window.innerWidth < 700 ? 260 : 620;
+    var positions = new Float32Array(COUNT * 3);
+    var speeds = new Float32Array(COUNT);
+    var colorChoices = [
+      new THREE.Color(0xff9d4d),
+      new THREE.Color(0xff5ca8),
+      new THREE.Color(0x4dd4ff),
+    ];
+    var colors = new Float32Array(COUNT * 3);
+
+    for (var i = 0; i < COUNT; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 34;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+      speeds[i] = 0.15 + Math.random() * 0.35;
+      var c = colorChoices[i % colorChoices.length];
+      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+    }
+
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    var mat = new THREE.PointsMaterial({
+      size: 0.09, vertexColors: true, transparent: true, opacity: 0.85,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+
+    particles = new THREE.Points(geo, mat);
+    particles.userData.speeds = speeds;
+    scene.add(particles);
+
+    window.addEventListener('resize', onResize);
+    window.addEventListener('mousemove', onMouseMove);
+    animate();
+  }
+
+  function onResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  function onMouseMove(e) {
+    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  }
+
+  var clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    var t = clock.getElapsedTime();
+    var pos = particles.geometry.attributes.position;
+    var speeds = particles.userData.speeds;
+
+    for (var i = 0; i < pos.count; i++) {
+      var y = pos.getY(i);
+      y += speeds[i] * 0.01;
+      if (y > 10) y = -10;
+      pos.setY(i, y);
+    }
+    pos.needsUpdate = true;
+
+    particles.rotation.y = t * 0.02;
+    camera.position.x += (mouseX * 1.5 - camera.position.x) * 0.02;
+    camera.position.y += (-mouseY * 1.0 - camera.position.y) * 0.02;
+    camera.lookAt(scene.position);
+
+    renderer.render(scene, camera);
+  }
+
+  if (!reduceMotion && window.WebGLRenderingContext) {
+    try { init(); } catch (e) { canvas.style.display = 'none'; }
+  } else {
+    canvas.style.display = 'none';
+  }
+})();
+
+window.__countdownPrefix = '⏳ se autodestruye en ';
+(function () {
+  var el = document.getElementById('hero-countdown');
+  var total = 60 * 60;
+  var remaining = total;
+  setInterval(function () {
+    remaining = remaining > 0 ? remaining - 1 : total;
+    var m = Math.floor(remaining / 60);
+    var s = remaining % 60;
+    el.textContent = window.__countdownPrefix + m + ':' + String(s).padStart(2, '0');
+  }, 1000);
+})();
+</script>
+
+<script>
+var I18N = {
+  es: {
+    'nav-why': 'Por qué', 'nav-features': 'Funcionalidades', 'nav-how': 'Cómo funciona',
+    'hero-eyebrow': 'Corre sobre cuentas temporales de Cloudflare',
+    'hero-title': 'Una pizarra que<br><span class="grad">se autodestruye sola.</span>',
+    'hero-sub': 'Un comando, cero login, cero cuenta que borrar después. <code>wrangler deploy --temporary</code> levanta una pizarra colaborativa en segundos sobre una cuenta de Cloudflare desechable que dura ~1 hora y desaparece sola — Worker, trazos y todo.',
+    'hero-cta-ghost': 'Ver código en GitHub',
+    'countdown-prefix': '⏳ se autodestruye en ',
+    'why-tag': 'Por qué existe',
+    'why-title': 'No toda pizarra necesita vivir para siempre',
+    'why-sub': 'A veces solo hace falta un espacio para dibujar algo puntual: explicar una idea, bocetar un diagrama, jugar a adivinar. Crear cuenta, configurar y después acordarte de borrarla es fricción que no aporta nada.',
+    'why-c1-h': 'Cero fricción', 'why-c1-p': 'Sin crear cuenta, sin login, sin tarjeta. Un comando y tenés una pizarra pública funcionando.',
+    'why-c2-h': 'Se limpia sola', 'why-c2-p': 'Nada que recordar borrar. Pasada la hora, Cloudflare elimina la cuenta temporal y todo lo que contiene.',
+    'why-c3-h': 'Privada por diseño', 'why-c3-p': 'Modo cerrado con invitaciones de un solo uso si necesitás que dibuje solo gente específica.',
+    'feat-tag': 'Funcionalidades',
+    'feat-title': 'Lo justo para dibujar en equipo',
+    'feat-sub': 'Construido sobre un único Durable Object por sala: WebSockets en vivo + SQLite para el estado.',
+    'feat-1-h': 'Dibujo en tiempo real', 'feat-1-p': 'Cada trazo se transmite en vivo mientras lo dibujás, no solo al terminar.',
+    'feat-2-h': 'Historial persistente', 'feat-2-p': 'Los últimos 300 trazos se guardan en SQLite del propio Durable Object. Quien entra tarde los ve todos.',
+    'feat-3-h': 'Exportar e importar', 'feat-3-p': 'Descargá tu dibujo como PNG o JSON, y reimportalo en una instancia futura para seguir donde quedaste.',
+    'feat-4-h': 'Abierta o cerrada', 'feat-4-p': 'Cualquiera con el link, o solo invitados con links de un solo uso generados por el admin.',
+    'feat-5-h': 'Rol admin', 'feat-5-p': 'El primero en conectar con <code>?admin=1</code> controla la sala y puede borrar la pizarra entera.',
+    'feat-6-h': 'Mobile-first', 'feat-6-p': 'Pantalla completa en celular, dibujo táctil, sin barras raras de zoom.',
+    'how-tag': 'Cómo funciona',
+    'how-title': 'De cero a pizarra en menos de un minuto',
+    'how-1-h': 'Cloná el repo', 'how-1-p': 'No hace falta tener cuenta de Cloudflare ni estar logueado.',
+    'how-2-h': 'Desplegá con --temporary', 'how-2-p': 'Wrangler crea una cuenta desechable, despliega el Worker y te da la URL pública.',
+    'how-3-h': 'Compartí el link', 'how-3-p': 'Mandale la URL de la pizarra a quien quieras. Vive mientras viva la cuenta temporal (~1 hora).',
+    'how-4-h': '¿Te gustó? Quedátela', 'how-4-p': 'Wrangler también te da una <em>claim URL</em>. Abrila y logueate antes de que venza la hora y el Worker pasa a tu cuenta real, para siempre. Si no hacés nada, se borra sola.',
+    'uc-tag': 'Casos de uso',
+    'uc-title': '¿Para qué sirve esto en la práctica?',
+    'uc-1': 'Brainstorming rápido en equipo', 'uc-2': 'Explicar un diagrama en vivo', 'uc-3': 'Clase o taller improvisado',
+    'uc-4': 'Boceto de arquitectura', 'uc-5': 'Dibujar y adivinar', 'uc-6': 'Mapa mental colaborativo', 'uc-7': 'Wireframe rápido para un cliente',
+    'foot-1': 'Repositorio', 'foot-2': 'Guía para agentes', 'foot-3': 'Docs: cuentas temporales', 'foot-4': 'Docs: Durable Objects',
+    'foot-note': 'No afiliado con Cloudflare. Hecho con <code>wrangler deploy --temporary</code>.',
+  },
+  en: {
+    'nav-why': 'Why', 'nav-features': 'Features', 'nav-how': 'How it works',
+    'hero-eyebrow': 'Runs on Cloudflare temporary accounts',
+    'hero-title': 'A whiteboard that<br><span class="grad">self-destructs.</span>',
+    'hero-sub': 'One command, zero login, zero account to clean up afterward. <code>wrangler deploy --temporary</code> spins up a collaborative whiteboard in seconds on a disposable Cloudflare account that lasts ~1 hour and disappears on its own — Worker, strokes, everything.',
+    'hero-cta-ghost': 'View code on GitHub',
+    'countdown-prefix': '⏳ self-destructs in ',
+    'why-tag': 'Why it exists',
+    'why-title': 'Not every whiteboard needs to live forever',
+    'why-sub': 'Sometimes you just need a space to sketch something one-off: explain an idea, draft a diagram, play a drawing game. Creating an account, setting it up, and remembering to delete it afterward is friction that adds nothing.',
+    'why-c1-h': 'Zero friction', 'why-c1-p': 'No account, no login, no card. One command and you have a working public whiteboard.',
+    'why-c2-h': 'Cleans up on its own', 'why-c2-p': 'Nothing to remember to delete. After the hour, Cloudflare removes the temporary account and everything in it.',
+    'why-c3-h': 'Private by design', 'why-c3-p': 'Closed mode with single-use invites if you need only specific people to draw.',
+    'feat-tag': 'Features',
+    'feat-title': 'Just enough for drawing together',
+    'feat-sub': 'Built on a single Durable Object per room: live WebSockets + SQLite for state.',
+    'feat-1-h': 'Real-time drawing', 'feat-1-p': 'Every stroke streams live as you draw it, not just when you finish.',
+    'feat-2-h': 'Persistent history', 'feat-2-p': 'The last 300 strokes are stored in the Durable Object\'s own SQLite. Late joiners see everything.',
+    'feat-3-h': 'Export & import', 'feat-3-p': 'Download your drawing as PNG or JSON, and re-import it into a future instance to keep going.',
+    'feat-4-h': 'Open or closed', 'feat-4-p': 'Anyone with the link, or only invitees with single-use links generated by the admin.',
+    'feat-5-h': 'Admin role', 'feat-5-p': 'Whoever connects first with <code>?admin=1</code> controls the room and can wipe the whole board.',
+    'feat-6-h': 'Mobile-first', 'feat-6-p': 'Full-screen on phones, touch drawing, no weird zoom bars.',
+    'how-tag': 'How it works',
+    'how-title': 'From zero to whiteboard in under a minute',
+    'how-1-h': 'Clone the repo', 'how-1-p': 'No Cloudflare account or login needed.',
+    'how-2-h': 'Deploy with --temporary', 'how-2-p': 'Wrangler creates a disposable account, deploys the Worker, and gives you the public URL.',
+    'how-3-h': 'Share the link', 'how-3-p': 'Send the whiteboard URL to whoever you want. It lives as long as the temporary account does (~1 hour).',
+    'how-4-h': 'Like it? Keep it', 'how-4-p': 'Wrangler also gives you a <em>claim URL</em>. Open it and log in before the hour is up and the Worker moves to your real account, permanently. Do nothing, and it deletes itself.',
+    'uc-tag': 'Use cases',
+    'uc-title': 'What is this actually good for?',
+    'uc-1': 'Quick team brainstorming', 'uc-2': 'Explain a diagram live', 'uc-3': 'Improvised class or workshop',
+    'uc-4': 'Architecture sketch', 'uc-5': 'Draw-and-guess game', 'uc-6': 'Collaborative mind map', 'uc-7': 'Quick wireframe for a client',
+    'foot-1': 'Repository', 'foot-2': 'Agent guide', 'foot-3': 'Docs: temporary accounts', 'foot-4': 'Docs: Durable Objects',
+    'foot-note': 'Not affiliated with Cloudflare. Built with <code>wrangler deploy --temporary</code>.',
+  },
+  pt: {
+    'nav-why': 'Por quê', 'nav-features': 'Funcionalidades', 'nav-how': 'Como funciona',
+    'hero-eyebrow': 'Roda sobre contas temporárias da Cloudflare',
+    'hero-title': 'Um quadro que<br><span class="grad">se autodestrói sozinho.</span>',
+    'hero-sub': 'Um comando, zero login, zero conta para apagar depois. <code>wrangler deploy --temporary</code> sobe um quadro colaborativo em segundos numa conta descartável da Cloudflare que dura ~1 hora e desaparece sozinha — Worker, traços, tudo.',
+    'hero-cta-ghost': 'Ver código no GitHub',
+    'countdown-prefix': '⏳ se autodestrói em ',
+    'why-tag': 'Por que existe',
+    'why-title': 'Nem todo quadro precisa viver para sempre',
+    'why-sub': 'Às vezes só falta um espaço para desenhar algo pontual: explicar uma ideia, rascunhar um diagrama, jogar de desenhar e adivinhar. Criar conta, configurar e depois lembrar de apagar é fricção que não agrega nada.',
+    'why-c1-h': 'Zero fricção', 'why-c1-p': 'Sem criar conta, sem login, sem cartão. Um comando e você tem um quadro público funcionando.',
+    'why-c2-h': 'Se limpa sozinho', 'why-c2-p': 'Nada para lembrar de apagar. Passada a hora, a Cloudflare remove a conta temporária e tudo que ela contém.',
+    'why-c3-h': 'Privado por design', 'why-c3-p': 'Modo fechado com convites de uso único se você precisar que só desenhe gente específica.',
+    'feat-tag': 'Funcionalidades',
+    'feat-title': 'O suficiente para desenhar em equipe',
+    'feat-sub': 'Construído sobre um único Durable Object por sala: WebSockets ao vivo + SQLite para o estado.',
+    'feat-1-h': 'Desenho em tempo real', 'feat-1-p': 'Cada traço é transmitido ao vivo enquanto você desenha, não só ao terminar.',
+    'feat-2-h': 'Histórico persistente', 'feat-2-p': 'Os últimos 300 traços ficam salvos no SQLite do próprio Durable Object. Quem entra depois vê tudo.',
+    'feat-3-h': 'Exportar e importar', 'feat-3-p': 'Baixe seu desenho como PNG ou JSON, e reimporte numa instância futura para continuar de onde parou.',
+    'feat-4-h': 'Aberto ou fechado', 'feat-4-p': 'Qualquer um com o link, ou só convidados com links de uso único gerados pelo admin.',
+    'feat-5-h': 'Papel de admin', 'feat-5-p': 'Quem conecta primeiro com <code>?admin=1</code> controla a sala e pode apagar o quadro inteiro.',
+    'feat-6-h': 'Mobile-first', 'feat-6-p': 'Tela cheia no celular, desenho por toque, sem barras estranhas de zoom.',
+    'how-tag': 'Como funciona',
+    'how-title': 'Do zero ao quadro em menos de um minuto',
+    'how-1-h': 'Clone o repositório', 'how-1-p': 'Não precisa de conta da Cloudflare nem estar logado.',
+    'how-2-h': 'Implante com --temporary', 'how-2-p': 'O Wrangler cria uma conta descartável, implanta o Worker e te dá a URL pública.',
+    'how-3-h': 'Compartilhe o link', 'how-3-p': 'Mande a URL do quadro para quem você quiser. Ele vive enquanto a conta temporária existir (~1 hora).',
+    'how-4-h': 'Gostou? Fique com ele', 'how-4-p': 'O Wrangler também te dá uma <em>claim URL</em>. Abra e faça login antes da hora acabar e o Worker passa para sua conta real, para sempre. Se não fizer nada, ele se apaga sozinho.',
+    'uc-tag': 'Casos de uso',
+    'uc-title': 'Para que isso serve na prática?',
+    'uc-1': 'Brainstorming rápido em equipe', 'uc-2': 'Explicar um diagrama ao vivo', 'uc-3': 'Aula ou workshop improvisado',
+    'uc-4': 'Rascunho de arquitetura', 'uc-5': 'Jogo de desenhar e adivinhar', 'uc-6': 'Mapa mental colaborativo', 'uc-7': 'Wireframe rápido para um cliente',
+    'foot-1': 'Repositório', 'foot-2': 'Guia para agentes', 'foot-3': 'Docs: contas temporárias', 'foot-4': 'Docs: Durable Objects',
+    'foot-note': 'Não afiliado à Cloudflare. Feito com <code>wrangler deploy --temporary</code>.',
+  },
+};
+
+(function () {
+  function applyLang(lang) {
+    var dict = I18N[lang] || I18N.es;
+    Object.keys(dict).forEach(function (id) {
+      if (id === 'countdown-prefix') {
+        window.__countdownPrefix = dict[id];
+        return;
+      }
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = dict[id];
+    });
+    document.documentElement.lang = lang;
+    document.querySelectorAll('.lang-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.lang === lang);
+    });
+    localStorage.setItem('lang', lang);
+  }
+
+  function detectLang() {
+    var saved = localStorage.getItem('lang');
+    if (saved && I18N[saved]) return saved;
+    var nav = (navigator.language || 'es').toLowerCase();
+    if (nav.indexOf('en') === 0) return 'en';
+    if (nav.indexOf('pt') === 0) return 'pt';
+    return 'es';
+  }
+
+  document.querySelectorAll('.lang-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { applyLang(btn.dataset.lang); });
+  });
+
+  applyLang(detectLang());
+})();
+</script>
+
+</body>
+</html>
