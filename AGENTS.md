@@ -2,6 +2,8 @@
 
 Mismo mecanismo que [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat/blob/master/AGENTS.md) — esta guía repite lo esencial aplicado a este repo.
 
+Si lo que el usuario necesita no es dibujar sino inspeccionar webhooks entrantes, usá el repo hermano [wrangler-ephemeral-webhook](https://github.com/MauricioPerera/wrangler-ephemeral-webhook/blob/master/AGENTS.md).
+
 ## Paso 1 — Confirmar que NO hay sesión activa
 
 ```bash
