@@ -10,6 +10,8 @@ Una pizarra colaborativa en tiempo real que se despliega en segundos sobre una *
 
 Hermana de [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-chat/)) y de [wrangler-ephemeral-airdrop](https://github.com/MauricioPerera/wrangler-ephemeral-airdrop) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-airdrop/)) y de [wrangler-ephemeral-sandbox](https://github.com/MauricioPerera/wrangler-ephemeral-sandbox) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-sandbox/)) — mismo patrón (Durable Objects + `wrangler deploy --temporary`), pero para chatear, compartir un archivo por QR, o que un agente ejecute JavaScript, en vez de dibujar.
 
+¿Querés chat + pizarra + airdrop juntos, en un solo deploy? Mirá [wrangler-ephemeral-suite](https://github.com/MauricioPerera/wrangler-ephemeral-suite).
+
 ## Cómo funciona
 
 - `wrangler deploy --temporary` crea una cuenta de Cloudflare temporal (sin login), despliega el Worker, y te da una URL pública en `workers.dev`.
