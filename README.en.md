@@ -10,6 +10,8 @@ A real-time collaborative whiteboard that deploys in seconds on a **Cloudflare t
 
 Sibling of [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-chat/)) and [wrangler-ephemeral-airdrop](https://github.com/MauricioPerera/wrangler-ephemeral-airdrop) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-airdrop/)) — same pattern (Durable Objects + `wrangler deploy --temporary`), but for chatting or sharing a file via QR instead of drawing.
 
+Also a sibling of [wrangler-ephemeral-webhook](https://github.com/MauricioPerera/wrangler-ephemeral-webhook) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-webhook/)) — for inspecting incoming webhooks live.
+
 ## How it works
 
 - `wrangler deploy --temporary` creates a temporary Cloudflare account (no login), deploys the Worker, and gives you a public URL on `workers.dev`.

@@ -12,6 +12,8 @@ Hermana de [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-
 
 ¿Querés chat + pizarra + airdrop juntos, en un solo deploy? Mirá [wrangler-ephemeral-suite](https://github.com/MauricioPerera/wrangler-ephemeral-suite) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-suite/)).
 
+También es hermano de [wrangler-ephemeral-webhook](https://github.com/MauricioPerera/wrangler-ephemeral-webhook) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-webhook/)) — para inspeccionar webhooks entrantes en vivo.
+
 ## Cómo funciona
 
 - `wrangler deploy --temporary` crea una cuenta de Cloudflare temporal (sin login), despliega el Worker, y te da una URL pública en `workers.dev`.

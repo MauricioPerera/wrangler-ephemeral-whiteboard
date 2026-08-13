@@ -10,6 +10,8 @@ Um quadro branco colaborativo em tempo real que é implantado em segundos numa *
 
 Irmão de [wrangler-ephemeral-chat](https://github.com/MauricioPerera/wrangler-ephemeral-chat) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-chat/)) e de [wrangler-ephemeral-airdrop](https://github.com/MauricioPerera/wrangler-ephemeral-airdrop) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-airdrop/)) — mesmo padrão (Durable Objects + `wrangler deploy --temporary`), mas para conversar ou compartilhar um arquivo via QR em vez de desenhar.
 
+Também é irmão de [wrangler-ephemeral-webhook](https://github.com/MauricioPerera/wrangler-ephemeral-webhook) ([landing page](https://mauricioperera.github.io/wrangler-ephemeral-webhook/)) — para inspecionar webhooks recebidos ao vivo.
+
 ## Como funciona
 
 - `wrangler deploy --temporary` cria uma conta temporária da Cloudflare (sem login), implanta o Worker e te dá uma URL pública em `workers.dev`.
